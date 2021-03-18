@@ -1,173 +1,172 @@
-# Unscented Kalman Filter
+# CH4 Data Representation from satellite Sentinel 5P
 
-The unscented Kalman filter (UKF) is a data fusion method to fuse a non-linear model with measurement data. Both the dynamical model and the coordinates transforms involved can become nonlinear . 
+<p align="center">Joep van Benten
 
-I created a simulation of a pendulum which produces simulated measurement data. It has a naive g-h filter implemented, and I would like to have it compared with the UKF. Unfortunately I got stuck at understanding how to pick initial values for the UKF . 
+<p align="center">Wala’a Mahmoud
 
-So with your help I would like to amend the program and implement a UKF demonstrator.
+<p align="center">Natanael Gomes
 
-```python
-'''
-Simulating the equation $mL^2\ddot{\theta} + b \dot{\theta} +mgL sin(\theta) = 0$
-'''
-import numpy as np
-import cv2
-import time
+<p align="center">Zulukade Wusiman
 
-# visulaization parameters
-height = 600
-width = 600
+<p align="center">Mitsy Prada
 
-# simulation 
-center = None
-
-# Pendulum parameters and variables
-
-#    initial conditions
-theta = np.pi/2.*.5
-omega = 0
-
-#    parametrs
-g = 0.98 #9.8 # m/s^2
-L = .3 # m
-m = 0.05 # kg
-b = 0 
-
-# Numerical integration parameters
-framerate = 60.0 # in frames per second
-dt = 1.0/framerate # Set dt to match the framerate of the webcam or animation
-t = time.clock()
-
-# Drawing parametres
-thickness = 3
-
-# Noise parameters 
-Sigma = 30*np.array([[1, 0],[0,1]])
-
-# Kalman inferred state variables (g-h model like right now)
-theta_kf = theta
-omega_kf = omega
-theta_kf_old = theta_kf
-# Keep looping
-
-# Create background image
-frame = np.zeros((height,width,3), np.uint8)
-
-center_old = (300, 300)
-center_noisy_old = (300, 300)
-center_kf_old = (300, 300)
+<p align="center">Akshit Bhardwaj
 
 
-L_kf= 200
-# Create background image
-frame = np.zeros((height,width,3), np.uint8)
-	
-cv2.circle(frame, (300, 300), 10, (0, 255, 255), -1)
-	
-	
-while True:
-	cv2.circle(frame, (300, 300), 10, (0, 255, 255), -1)
-	# == Simulation model ==
-	
-	# Update state 
-	theta = theta + dt*omega
-	omega = omega - dt*g/L*np.sin(theta) - dt*b/(m*L*L)*omega 
-	
-	# Map the state to a nearby pixel location
-	center = np.array((int(300+ 200*np.sin(theta)) ,int(300 + 200*np.cos( theta))) ) 
-	# center = (int(300+ 100*theta) ,int(300 + 25*omega)) 
-	center_noisy = tuple(center+np.matmul(Sigma,np.random.randn(2)).astype(int))
-	
-	# Draw the pendulum
-	#cv2.line(frame, (300,300), tuple(center), (0, 0, 255), thickness)
-	cv2.circle(frame, tuple(center_old), 10, (0, 0, 0), -1)
-	cv2.circle(frame, center_noisy_old, 10, (0, 0, 0), -1)
-	
-	
-	cv2.circle(frame, tuple(center), 10, (0, 255, 255), -1)
-	cv2.circle(frame, center_noisy, 10, (0, 0, 255), -1)
+## Introduction 
 
-	center_old = center
-	center_noisy_old = center_noisy
-	
-	
-	# == Kalman model ==
-	# Prediction
-	theta_kf +=   dt*omega_kf 
-	omega_kf += - dt*g/L*np.sin(theta_kf) - dt*b/(m*L*L)*omega_kf 
-	
-	# expected observation
-	center_kf = np.array((int(300+ L_kf*np.sin(theta_kf)) ,int(300 + L_kf*np.cos( theta_kf))) ) 
-	
-	# Observation Update 
-	observation = center_noisy 
-	
-	print(observation)
-	theta_observed = np.arctan( (observation[0]-300)/(observation[1]-300))
-	L_observed= np.sqrt(np.power(observation[0]-300,2)+np.power(observation[1]-300,2))
-	theta_gain = 0.2
-	omega_gain = 0
-	L_gain = 0.02
-	theta_kf += theta_gain*(theta_observed-theta_kf)
-	omega_kf += omega_gain*((theta_kf-theta_kf_old)/dt -omega_kf)
-	L_kf += L_gain *(L_observed-L_kf)
-	theta_kf_old = theta_kf 
-	center_kf = np.array((int(300+ L_kf*np.sin(theta_kf)) ,int(300 + L_kf*np.cos( theta_kf))) ) 
-	
-	# Map the state to a nearby pixel location
-	
-	cv2.circle(frame, tuple(center_kf_old), 10, (0, 0, 0), -1)
-	center_kf_old = center_kf
-	cv2.circle(frame, tuple(center_kf), 10, (255, 0, 255), -1)
-	
-	# show the frame to our screen
-	cv2.imshow("Frame", frame)
-	key = cv2.waitKey(int(dt*400)) & 0xFF
+The goal of our project is to detect methane leakages based on satellite measurements from TROPOMI. Most of the rubric aspects have been applied in this project. Unfortunately, we conclude that it will be very difficult to detect leakages purely based on TROPOMI data, explained in more detail throughout the document.
 
-	# if the 'q' key is pressed, stop the loop
-	if key == ord("q"):
-		break
-	
-	
-	# Wait with calculating next animation step to match the intended framerate
-	t_ready = time.clock()
-	d_t_animation = t + dt -  t_ready
-	t += dt
-	if  d_t_animation > 0:
-		time.sleep(d_t_animation)
-		
-		
-	
-		
-		
+The structure of the repository has become somewhat chaotic due to the parallel work of the members of this group on data fusion, analysis and presentation of results, for which multiple solutions exist.
 
-# close all windows
-cv2.destroyAllWindows()
-```
+ 
+
+## Incidents
+
+To learn how to detect a leakage we need to see how a leakage looks like in TROPOMI data. The first incident case studied is the Ohio natural gas well blowout. They used the total column CH4 measurements from the TROPOMI data. They pick a period, in this period only two days of measurements met their selection threshold. They discovered that due to cloud cover leaving the orbit, it will show no measurements at some days. But we decided to study more incident cases to see if the incidents will show a pattern on the TROPOMI data.
+
+We wanted to get the data of Ohio incident from TROPOMI website, but the website shows only data from 2019 and 2020. Thus, we searched more news of gas (methane or natural gas) leakage. The result is on the GitHub repository called gas_leakage_incident.xlsx.
+
+ 
+
+## Requirements
+
+Our goal is to use TROPOMI data to detect a methane leakage.
+
+\-     Download Data
+
+\-     Combine data
+
+\-     Build fusion architecture 
+
+\-     Construct a common representation format
+
+\-     Analyze Data
+
+\-     Build detection algorithm
+
+## Download Data
+
+We found out that the CH4 data of TROPOMI has multiple orbits per day. That means we need to download the data based on the region we wanted to study. Otherwise it will take a lot of space to store it. We thought about using API to get the data, but there is no API available. Thus, we have to manually download the data from the places where the incidents happened. 
+
+The data we downloaded contains important information; coordinates, CH4 measurements and dates. In this way, we decided to fuse all the data from different orbits in the same day based on the area where the incident happened. And for studying the leakage [1] we decided to use the data of 10 days before and after the incident happened. 
+
+ 
+
+ 
+
+## Fusion architecture
+
+Our fusion architectures are:
+
+1. Fuse the data from all the orbits in the same day.
+
+2. Detect the leakage over 20 days (10 days before and after the incident date).
+
+ 
+
+## Combining data & representation format
+
+ This part contains multiple implemented methods to combine data of multiple orbits and days.
+
+**Method 1: combine orbits of the same day (used in ‘notebook’)**
+
+\-     Create a list ‘dates’ of all days.
+
+\-     For each orbit of the same day extract the latitude, longitude and methane value.
+
+\-     Create a list ‘data_per_day’ containing for each day a list of [latitude, longitude, methane].
+
+**Method 2: Normalized data fusion (used in ‘Tropomi_CH4_Leakages.ipynb’)**
+
+\-     Given the data from two orbits, Orbit1 and Orbit2, composed of coordinates (latitude, longitude), methane concentration and quality index of each coordinate.
+
+\-     Locate the area of overlap using geometry: create two polygons using the 4 extreme coordinates (north, south, east, west), identify the intersection of the two polygons to obtain the overlapping area.
+
+\-     For the coordinates of Orbit1 inside of the intersection calculate the distance to the closest coordinate in the Orbit2. If the distance is smaller than 9.89 km (diagonal between coordinates) combine the two values into one.
+
+\-     To combine the data normalizing the values by their quality index, we gave more weight to data with better quality index.
+
+**Method 3: Store the data (latitudes, longitudes, methane mixing ratio) into X by Y arrays（used** **in** **‘tropomi project-CH4 average.ipynb’**)
+
+\-     X is number of days; Y is amount of orbits
+
+## Data visualization
+
+Visualizations enable humans to understand the data. We came out with several options for this challenge.
+
+### **Basemap**
+
+One of the matplotlib toolkits is basemap, which enables to plot data on a world map. Below is a basemap plot shown containing (1) the data of multiple orbits and (2) a blue plane of each orbit coverage.
+
+![basemap1](/image/report%20figs/basemap1.PNG)
+
+<p align="center">Figure 1: Basemap over china
 
 
-## Literature:
+Videos are created to see how the data of a location changes over time. The videos contain for each plot a frame, see (reference to video folder).
 
-Some of the links below require you to be logged in to Hanze.nl
+### **Interactive plots**
 
-### Method Papers
+The Python library Folium enables to create interactive maps using the leaflet.js library. The basic version enables to zoom in and out within a Jupyter notebook. The image below shows all data points from an orbit containing a methane value (the colormap is not yet added).
 
-Necessary:
+![folium2](/image/report%20figs/folium2.PNG)
 
-S.J. Julier and J.K. Uhlmann, *Unscented Filtering and Nonlinear Estimation*,  Proceedings of the IEEE  vol. 92 no. 3 (March 2004): 401-422,   [10.1109/JPROC.2003.823141](https://hanze.on.worldcat.org/oclc/4655140781)
+<p align="center">Figure 2: Itheractive plots using scatter
 
-E.A. Wan and R. van der Merwe, *The unscented Kalman filter for nonlinear estimation*
-Proceedings of the IEEE 2000 Adaptive Systems for Signal Processing, Communications, and Control Symposium, Cat. No.00EX373,  [IEE Explore](https://ieeexplore.ieee.org/xpl/conhome/7076/proceeding), [Author version](https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf).
 
-Roger Labbe,  Kalman and Bayesian filters in Python, [Book and Code on Github](https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python), Chapters 1, 8 and 10.
+Also, data from multiple days can be shown and controlled via the time slider at the bottom. The image below is a plot of detected moving clusters (explained later in the document).
 
-Optional:
+![folium1](/image/report%20figs/folium1.PNG)
 
-E.A. Wan,  R. van der Merwe and A.T. Nelson, *Dual Estimation and the Unscented Transformation*, [NIPS](https://papers.nips.cc/paper/1681-dual-estimation-and-the-unscented-transformation.pdf)
-
-### Application Papers
-
-J. H. Gove1and D. Y. Hollinger, JOURNAL OF GEOPHYSICAL RESEARCH, VOL. 111, D08S07, doi:10.1029/2005JD006021, 2006 [Wiley](https://agupubs.onlinelibrary.wiley.com/doi/epdf/10.1029/2005JD006021)
+<p align="center">Figure 3: Itheractive plots using scatter for multiple days
 
 
 
+
+## Data Analysis
+
+### **Clusters** 
+
+When we open an ncd file, i.e. the satellite data, we find that there are Fill values in place for some readings. These readings are basically omitted data points and the value is just there as a placeholder. 
+
+![img](image/report%20figs/fig4.png)
+
+<p align="center">Figure 4: cluster
+
+For our data frame we omit these fill values and only plot the relevant values. Plotting these values on a map it shows up as follows.
+
+### **Statistical representation**
+
+We chose a rectangular area that covers a big part of China, and build the CH4, latitude and longitude lists for the area of study and for the period of one month. Then we calculated the average, percentile, minimum and maximum of each day, and standard deviation. From the result of studying one month of data, we can see that there is a pick on the CH4_maximum line between the 7th and the 9th of May, this might reflect the construction incident with date 6th of May in coordinates 40.820417, 111.662833 (see gas_leakage_incident.xlsx).
+
+![CH4_statistical_data](image/report%20figs/CH4_statistical_data.png)
+
+<p align="center">Figure 5: CH4 statistical data of China during May
+
+
+
+
+## Conclusions
+
+We have found multiple incidents of methane leakages. We expected that visualizing the leakages would give us an understanding of how we can detect them via an algorithm. To visualize the leakage is data of multiple orbits and days combined. The visualization (link to videos) show that only Tropomi data is insufficient to see a leakage.
+
+ 
+
+## Reference 
+
+[1]. Pandey, S., Gautam, R., Houweling, S., Denier van der Gon, H., Sadavarte, P., Borsdorff, T., et al. (2019). Satellite observations reveal extreme methane leakage from a natural gas well blowout. Proceedings of the National Academy of Sciences. https://doi.org/10.1073/pnas.1908712116
+
+
+
+
+
+## **Instructions for data files**
+
+We have a shared folder to include all data files, this files must be included on the folder 'data' in the repo folder.
+In the code always refer to the folder 'data' so we can run the same code in any computer.
+the data folder and the checkpoint folder are in the gitignore and will not be tracked by git.
+
+## **Videos folder**
+
+The videos folder contains a collection of videos produced using the data from the netCDF4 files, to objective is to investigate the leakages listed on the "gas_leakage_incident.xlsx" file. The videos are produced with 0.5 frames per second and have a red circle with raius of 50 km around the incident coordenates. It is considered 10 days before and after the incident. In the folder 'fusion' there is a collection of videos using the data combined of 2 orbits around the incident, also 0.5 frames per second. In the case a netCDF4 file is not available the day is skipped.
